@@ -82,13 +82,19 @@ describe('parseCliOptions', () => {
     }
   });
 
-  it('rejects --workspace with http transport', () => {
+  it('accepts --workspace with an explicit http transport (local folder over HTTP)', () => {
     const ws = process.platform === 'win32' ? 'C:\\projects\\my-app' : '/home/user/projects/my-app';
     const result = parseCliOptions(['--transport', 'http', '--workspace', ws]);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error).toContain('--workspace is only supported with --transport stdio');
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.options.transport).toBe('http');
+      expect(result.options.workspace).toBe(ws);
     }
+  });
+
+  it('rejects relative workspace path for http', () => {
+    const result = parseCliOptions(['--transport', 'http', '--workspace', 'relative/path']);
+    expect(result.ok).toBe(false);
   });
 
   it('rejects invalid transport option', () => {

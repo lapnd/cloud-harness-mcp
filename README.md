@@ -130,6 +130,16 @@ In local mode:
 - Network Git (`git_fetch`, `git_pull`) and Git push (`git_push`) are disabled by default and require explicit startup opt-in flags (`--git-network`, `--git-push`).
 - v1 supports POSIX (Linux and macOS); Windows process semantics are a documented follow-up (use WSL on Windows).
 
+### Local folder over HTTP
+
+`--transport http --workspace /abs/path` serves the same local folder backend
+over authenticated Streamable HTTP (owner bearer or Cloudflare Access, same
+host/origin checks and request limits as `/mcp`), so remote clients such as
+ChatGPT can work on a folder you cloned yourself. There is no runner, Docker
+executor, dashboard or MCP gateway in this mode: commands run as the API
+process user inside the folder, so run it inside a dedicated VM or machine and
+expose only the folders you want the model to change.
+
 ### CLI options
 
 | Option | Description |

@@ -116,17 +116,15 @@ export function parseCliOptions(argv: string[]): ParseCliResult {
     return { ok: true, options };
   }
 
-  if (transport === 'stdio') {
-    if (!workspace) {
-      return { ok: false, error: 'stdio transport requires an explicit --workspace <absolute-path>' };
-    }
-    if (!isAbsolute(workspace)) {
-      return { ok: false, error: `--workspace path must be absolute (received: "${workspace}")` };
-    }
-  } else if (workspace && !transportExplicit) {
-    return { ok: false, error: '--workspace is only valid when --transport stdio is specified' };
-  } else if (transport === 'http' && workspace) {
-    return { ok: false, error: '--workspace is only supported with --transport stdio' };
+  if (transport === 'stdio' && !workspace) {
+    return { ok: false, error: 'stdio transport requires an explicit --workspace <absolute-path>' };
+  }
+  if (workspace && !transportExplicit) {
+    // Serving a local folder over HTTP is a deliberate choice, never a default.
+    return { ok: false, error: '--workspace requires an explicit --transport stdio or --transport http' };
+  }
+  if (workspace && !isAbsolute(workspace)) {
+    return { ok: false, error: `--workspace path must be absolute (received: "${workspace}")` };
   }
 
   if (gitPush && !gitNetwork) {
@@ -148,7 +146,9 @@ Usage:
 
 Options:
   --transport <http|stdio>   Transport protocol: http (default) or stdio
-  --workspace <path>         Absolute path to local project folder (required for stdio)
+  --workspace <path>         Absolute path to a local folder to serve as the workspace
+                             (required for stdio; with --transport http, serves it over
+                             authenticated HTTP instead of using the runner)
   --git-network              Enable network Git operations (fetch, pull, clone) in local mode
   --git-push                 Enable Git push operations in local mode (implies --git-network)
   --env <NAME>               Forward additional host environment variable (repeatable)

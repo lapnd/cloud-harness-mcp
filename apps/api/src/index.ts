@@ -1,8 +1,10 @@
 #!/usr/bin/env node
+import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:http';
 import { realpath, stat } from 'node:fs/promises';
 import { serveStdio } from '@modelcontextprotocol/server/stdio';
 import { createApiApp } from './app.js';
+import { createLocalHttpApp } from './local-http-app.js';
 import { loadApiConfig } from './config.js';
 import { parseCliOptions, getCliHelp } from './cli-options.js';
 import { LocalWorkspaceBackend } from './local/local-workspace-backend.js';
@@ -17,6 +19,21 @@ if (!parsed.ok) {
 }
 
 const { options } = parsed;
+
+async function resolveWorkspaceRoot(workspacePath: string): Promise<string> {
+  try {
+    const stats = await stat(workspacePath);
+    if (!stats.isDirectory()) {
+      process.stderr.write(`Error: --workspace path "${workspacePath}" is not a directory.\n`);
+      process.exit(1);
+    }
+    return await realpath(workspacePath);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`Error: failed to resolve workspace path "${workspacePath}": ${msg}\n`);
+    process.exit(1);
+  }
+}
 
 if (options.help) {
   process.stdout.write(getCliHelp() + '\n');
@@ -37,21 +54,7 @@ if (options.transport === 'stdio') {
     process.exit(1);
   }
 
-  const workspacePath = options.workspace!;
-  let canonicalRoot: string;
-  try {
-    const stats = await stat(workspacePath);
-    if (!stats.isDirectory()) {
-      process.stderr.write(`Error: --workspace path "${workspacePath}" is not a directory.\n`);
-      process.exit(1);
-    }
-    canonicalRoot = await realpath(workspacePath);
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    process.stderr.write(`Error: failed to resolve workspace path "${workspacePath}": ${msg}\n`);
-    process.exit(1);
-  }
-
+  const canonicalRoot = await resolveWorkspaceRoot(options.workspace!);
   const backend = new LocalWorkspaceBackend(canonicalRoot, options);
   const handle = serveStdio(() => createCloudHarnessServer(backend), {
     legacy: 'serve',
@@ -81,11 +84,18 @@ if (options.transport === 'stdio') {
   process.stdin.on('close', () => void shutdown('EOF'));
   process.stdin.on('end', () => void shutdown('EOF'));
 } else {
+  // A local folder served over HTTP has no runner; the runner token only
+  // satisfies the shared configuration schema and is never sent anywhere.
+  if (options.workspace && !process.env.RUNNER_TOKEN && !process.env.RUNNER_TOKEN_FILE) {
+    process.env.RUNNER_TOKEN = randomBytes(32).toString('hex');
+  }
   const config = loadApiConfig();
-  const runtime = createApiApp(config);
+  const runtime = options.workspace
+    ? createLocalHttpApp(config, new LocalWorkspaceBackend(await resolveWorkspaceRoot(options.workspace), options))
+    : createApiApp(config);
   const server = createServer(runtime.app);
   server.listen(config.port, config.host, () =>
-    apiLogger.info({ host: config.host, port: config.port }, 'API listening')
+    apiLogger.info({ host: config.host, port: config.port, localWorkspace: options.workspace ?? null }, 'API listening')
   );
 
   async function shutdown(signal: string) {
