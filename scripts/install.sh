@@ -4,7 +4,7 @@
 set -euo pipefail
 umask 077
 
-PROJECT_ORIGIN="https://github.com/bestagentkits/cloud-harness-mcp.git"
+PROJECT_ORIGIN="${CLOUD_HARNESS_ORIGIN:-https://github.com/bestagentkits/cloud-harness-mcp.git}"
 INSTALL_ROOT="/opt/cloud-harness-mcp"
 REPO_DIR="$INSTALL_ROOT/repo"
 CONFIG_DIR="/etc/cloud-harness-mcp"
@@ -63,6 +63,10 @@ parse_args() {
         RELEASE_SHA="$2"
         shift 2
         ;;
+      --origin)
+        PROJECT_ORIGIN="$2"
+        shift 2
+        ;;
       --non-interactive)
         NON_INTERACTIVE=true
         shift
@@ -78,6 +82,8 @@ Options:
                              Ingress type (default: caddy)
   --tunnel-token <TOKEN>     Cloudflare Tunnel token (required if --ingress tunnel)
   --release-sha <SHA>        Pinned 40-character Git commit SHA to deploy
+  --origin <URL>             HTTPS .git URL of the repository to deploy (default: upstream;
+                             also CLOUD_HARNESS_ORIGIN). Deploys that repository's main branch.
   --non-interactive          Run without interactive prompts
   --help, -h                 Show this help message
 EOF
@@ -277,6 +283,9 @@ checkout_repository() {
   fi
 
   cd "$REPO_DIR"
+  git remote set-url origin "$PROJECT_ORIGIN"
+  printf '%s\n' "$PROJECT_ORIGIN" > "$CONFIG_DIR/deploy-origin"
+  chmod 0600 "$CONFIG_DIR/deploy-origin"
   git fetch --prune origin main
 
   if [[ -z "$RELEASE_SHA" ]]; then

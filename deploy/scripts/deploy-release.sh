@@ -13,7 +13,12 @@ fi
 
 release_sha=${1:-}
 repo=/opt/cloud-harness-mcp/repo
+# A fork deployment records its origin at install time; the default stays upstream.
 origin=https://github.com/bestagentkits/cloud-harness-mcp.git
+if [[ -s /etc/cloud-harness-mcp/deploy-origin ]]; then
+  origin=$(head -n 1 /etc/cloud-harness-mcp/deploy-origin)
+  [[ $origin =~ ^https://[A-Za-z0-9.-]+/[A-Za-z0-9._/-]+\.git$ ]] || { echo "invalid deploy origin" >&2; exit 3; }
+fi
 install -d -m 0700 "$state/state" "$state/backups"
 install -d -m 0750 "$state/jobs" "$state/artifacts"
 env_file=/etc/cloud-harness-mcp/runtime.env
