@@ -342,13 +342,19 @@ bootstrap_secrets() {
       printf 'REPO_CACHE_ROOT=/var/lib/cloud-harness/cache/repos\n'
       printf 'EXECUTOR_IMAGE=cloud-harness-executor:local\n'
       printf 'ALLOWED_GIT_HOSTS=github.com\n'
-      printf 'WORKSPACE_NETWORK_MODE=none\n'
+      printf 'WORKSPACE_NETWORK_PROFILE=network-none\n'
       printf 'WORKSPACE_WALL_TTL_SECONDS=900\n'
       printf 'WORKSPACE_IDLE_TTL_SECONDS=300\n'
     } > "$env_file"
     chmod 0600 "$env_file"
   else
     log "Preserving existing runtime configuration at $env_file."
+    # WORKSPACE_NETWORK_MODE was replaced by WORKSPACE_NETWORK_PROFILE; the runner refuses the old name.
+    if grep -q '^WORKSPACE_NETWORK_MODE=' "$env_file"; then
+      sed -i -e '/^WORKSPACE_NETWORK_MODE=/d' "$env_file"
+      grep -q '^WORKSPACE_NETWORK_PROFILE=' "$env_file" || printf 'WORKSPACE_NETWORK_PROFILE=network-none\n' >> "$env_file"
+      log "Migrated WORKSPACE_NETWORK_MODE to WORKSPACE_NETWORK_PROFILE"
+    fi
     if [[ -n "$DOMAIN" ]]; then
       local current_hosts current_origins
       current_hosts=$(grep '^API_PUBLIC_HOSTS=' "$env_file" | cut -d'=' -f2- || true)
