@@ -65,6 +65,8 @@ Copy `.env.example` to `.env` and replace all `change-me` placeholder secrets be
 | `EXECUTOR_IMAGE` | `cloud-harness-executor:local` | **Required** | Required configuration. |
 | `NETWORK_GUARD_IMAGE` | `cloud-harness-network-guard:local` | **Required** | Required configuration. |
 | `ALLOWED_GIT_HOSTS` | `github.com` | **Required** | Required configuration. |
+| `PRIVATE_GIT_HOSTS` | `gitlab.corp.example` | Optional | Allowlisted hosts that may resolve to RFC 1918 / IPv6 unique-local addresses, for a self-hosted GitLab or Gitea on an internal network. Loopback and link-local stay forbidden. |
+| `GIT_TOKEN_GITLAB_CORP_EXAMPLE` | `—` | Optional | Credential for a non-GitHub host: GIT_TOKEN_ + hostname upper-cased, non-alphanumerics as _. Sent only to that host (HTTPS password; username is ignored by GitLab personal access tokens). Honoured here only in owner-bearer mode; in cloudflare-access mode create a dashboard global secret with the same name instead. Also accepts the _FILE form. |
 | `WORKSPACE_NETWORK_PROFILE` | `dependency-access` | **Required** | Executor egress for newly opened workspaces. dependency-access (default) permits public DNS and TCP 80/443 so the GitHub API and the bundled gh CLI work; network-none blocks all egress. dependency-access requires a Linux host firewall provisioned via deploy/scripts/setup-dependency-firewall.sh and is refused, never silently downgraded, when that firewall is not attested. The dashboard Settings page overrides this value for future workspaces without a redeploy. |
 | `DEPENDENCY_DNS_RESOLVERS` | `8.8.8.8,1.1.1.1` | Optional | Optional configuration. |
 | `DEPENDENCY_BRIDGE_SUBNET` | `172.30.240.0/24` | Optional | Optional configuration. |

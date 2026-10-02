@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { RunnerConfigSchema, SecretKeyringConfigSchema, type RunnerConfig } from '@cloud-harness/contracts';
+import { GIT_HOST_TOKEN_PREFIX, RunnerConfigSchema, SecretKeyringConfigSchema, type RunnerConfig } from '@cloud-harness/contracts';
 
 function secret(name: string): string | undefined {
   const file = process.env[`${name}_FILE`];
@@ -23,6 +23,18 @@ function plausibleGitHubToken(value: string | undefined): string | undefined {
     return undefined;
   }
   return value;
+}
+
+/** Collect `GIT_TOKEN_<HOST>` (or `GIT_TOKEN_<HOST>_FILE`) credentials for non-GitHub hosts. */
+function gitHostTokensFromEnvironment(): Record<string, string> {
+  const tokens: Record<string, string> = {};
+  for (const key of Object.keys(process.env)) {
+    const name = key.endsWith('_FILE') ? key.slice(0, -'_FILE'.length) : key;
+    if (!name.startsWith(GIT_HOST_TOKEN_PREFIX) || name.length === GIT_HOST_TOKEN_PREFIX.length || tokens[name]) continue;
+    const value = secret(name)?.trim();
+    if (value && !/[\s\0]/.test(value)) tokens[name] = value;
+  }
+  return tokens;
 }
 
 const csv = (value: string | undefined, fallback: string) => (value ?? fallback).split(',').map((entry) => entry.trim()).filter(Boolean);
@@ -127,6 +139,8 @@ export function loadRunnerConfigWithReadiness(): RunnerConfigLoadResult {
     executorImage: process.env.EXECUTOR_IMAGE ?? 'cloud-harness-executor:local',
     networkGuardImage: process.env.NETWORK_GUARD_IMAGE ?? 'cloud-harness-network-guard:local',
     allowedGitHosts: csv(process.env.ALLOWED_GIT_HOSTS, 'github.com'),
+    privateGitHosts: csv(process.env.PRIVATE_GIT_HOSTS, '').map((host) => host.toLowerCase()),
+    gitHostTokens: gitHostTokensFromEnvironment(),
     networkProfile: process.env.WORKSPACE_NETWORK_PROFILE,
     dependencyDnsResolvers: process.env.DEPENDENCY_DNS_RESOLVERS ? csv(process.env.DEPENDENCY_DNS_RESOLVERS, '8.8.8.8,1.1.1.1') : undefined,
     dependencyBridgeSubnet: process.env.DEPENDENCY_BRIDGE_SUBNET,

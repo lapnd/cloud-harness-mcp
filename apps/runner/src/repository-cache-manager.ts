@@ -20,7 +20,8 @@ export class RepositoryCacheManager {
     private readonly store: StateStore,
     private readonly allowedGitHosts: string[],
     private readonly executorImage: string = 'cloud-harness-executor:local',
-    private readonly instanceId: string = 'local'
+    private readonly instanceId: string = 'local',
+    private readonly privateGitHosts: readonly string[] = []
   ) {}
 
   getCachePath(ownerId: string, repositoryUrl: string): string {
@@ -40,7 +41,7 @@ export class RepositoryCacheManager {
     signal?: AbortSignal,
     options?: { network?: string; httpProxy?: string }
   ): Promise<{ cachePath: string; isReady: boolean }> {
-    await validateRepositoryUrl(repositoryUrl, this.allowedGitHosts);
+    await validateRepositoryUrl(repositoryUrl, this.allowedGitHosts, this.privateGitHosts);
     const urlHash = createHash('sha256').update(repositoryUrl.toLowerCase().trim()).digest('hex');
     const cachePath = join(this.cacheRoot, ownerId, `${urlHash}.git`);
     const ownerDir = join(this.cacheRoot, ownerId);

@@ -102,7 +102,12 @@ must still be large enough for the intended operation.
 ## Workspace and repository policy
 
 `ALLOWED_GIT_HOSTS` is a host allowlist, not permission to use arbitrary URL
-schemes or private addresses. The effective executor network profile resolves in
+schemes or private addresses. `PRIVATE_GIT_HOSTS` names the allowlisted hosts
+(for example a self-hosted GitLab) that may resolve to RFC 1918 or IPv6
+unique-local addresses; loopback and link-local stay forbidden for every host.
+Non-GitHub hosts authenticate with `GIT_TOKEN_<HOST>` (see `.env.example` and
+`gitHostTokenName` in `packages/contracts/src/secret-policy.ts`); a GitHub
+credential is never sent to another host. The effective executor network profile resolves in
 three tiers, each of which outranks the next:
 
 1. an explicit `workspace_open.networkProfile`;

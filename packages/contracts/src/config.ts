@@ -213,6 +213,18 @@ export const RunnerConfigSchema = z.object({
   executorImage: z.string().min(1),
   networkGuardImage: z.string().min(1).default('cloud-harness-network-guard:local'),
   allowedGitHosts: z.array(z.string().min(1)).min(1),
+  /**
+   * Allowlisted hosts (`PRIVATE_GIT_HOSTS`) that may resolve to RFC 1918 or
+   * IPv6 unique-local addresses, such as a self-hosted GitLab on an internal
+   * network. Loopback and link-local targets stay forbidden for every host.
+   */
+  privateGitHosts: z.array(z.string().min(1)).default([]),
+  /**
+   * Operator-wide credentials for non-GitHub hosts, keyed by
+   * `gitHostTokenName(host)` (for example `GIT_TOKEN_GITLAB_EXAMPLE_COM`).
+   * Same boundary as `githubToken`: runner-only and `owner-bearer` mode only.
+   */
+  gitHostTokens: z.record(z.string(), z.string().min(1).max(512)).default({}),
   networkProfile: ExecutorNetworkProfileSchema.default('dependency-access'),
   /**
    * Shipped default is egress-enabled so a workspace can reach the GitHub API

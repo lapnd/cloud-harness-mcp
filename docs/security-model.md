@@ -195,7 +195,12 @@ enforcement targets Linux with the Docker iptables backend; the host firewall
 is a trusted operator-owned control outside the executor's authority.
 
 Repository opening accepts only credential-free HTTPS URLs on configured
-hosts and rejects private/link-local resolutions. The clone helper disables
+hosts and rejects private/link-local resolutions. The operator may exempt named
+hosts from the private-range check with `PRIVATE_GIT_HOSTS` (an internal Git
+server); loopback, link-local and cloud-metadata addresses are never exempt.
+A non-GitHub host credential (`GIT_TOKEN_<HOST>`) is supplied over stdin only
+to helpers talking to that host, exactly like a GitHub token, and GitHub
+credentials are never offered to a non-GitHub host. The clone helper disables
 hooks, recursive submodules, tag downloads, redirects, and LFS smudging.
 Repository code is never evaluated by the runner during clone.
 

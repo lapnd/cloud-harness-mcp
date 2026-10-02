@@ -8,6 +8,7 @@ import {
   GITHUB_READ_ACTIONS,
   GITHUB_WRITE_ACTIONS,
   HarnessError,
+  gitHostTokenName,
   InternalRunnerRequestSchema,
   RunnerOperationSchema,
   RunnerResponseSchema,
@@ -31,6 +32,7 @@ import type { GitHubInstallationRecord, GitHubInstallationStore } from './github
 import type { MetadataStore } from './metadata-store.js';
 import { OperationManager } from './operation-manager.js';
 import { validateRepositoryUrl } from './repository-policy.js';
+import { hasGitHostToken, isGitHubHost, resolveGitHostToken } from './git-host-credential.js';
 import { cloneHistorySpec, fetchHistorySpec } from './git-history-spec.js';
 import {
   ActiveWorkspaceLimitReachedError,
@@ -229,7 +231,7 @@ export class WorkspaceService {
     this.operations = new OperationManager(this.store, this.bootId);
     this.operations.redactorProvider = (wsId) => this.getRedactor(wsId);
     this.networkProfileManager = new NetworkProfileManager(this.config);
-    this.repoCacheManager = new RepositoryCacheManager(this.config.repoCacheRoot, this.store, this.config.allowedGitHosts, this.config.executorImage, this.instanceId);
+    this.repoCacheManager = new RepositoryCacheManager(this.config.repoCacheRoot, this.store, this.config.allowedGitHosts, this.config.executorImage, this.instanceId, this.config.privateGitHosts);
     const cacheRoot = this.config.toolkitCacheRoot || (this.config.jobsRoot && !this.config.jobsRoot.startsWith('/var/lib') ? join(this.config.jobsRoot, 'toolkit-cache') : '/var/lib/cloud-harness/cache/toolkits');
     const provNet = this.config.provisioningNetwork || 'cloud-harness-mcp_provisioning';
     this.toolkitCacheManager = new ToolkitCacheManager(cacheRoot, this.store);
@@ -289,6 +291,8 @@ export class WorkspaceService {
       metadata: this.metadata
     });
     if (fallbackToken) values['GH_TOKEN'] = fallbackToken;
+    const hostToken = this.gitHostTokenFor(record.ownerId, record.repositoryUrl);
+    if (hostToken) values[hostToken.name] = hostToken.token;
     return values;
   }
 
@@ -835,7 +839,7 @@ export class WorkspaceService {
       return { ok: prior.status === 'ACTIVE', message: 'Idempotent workspace result', data: this.publicWorkspaceRecord(prior), truncated: false };
     }
     await this.ensureCapacity(ownerId);
-    const url = await validateRepositoryUrl(parsed.repositoryUrl, this.config.allowedGitHosts);
+    const url = await validateRepositoryUrl(parsed.repositoryUrl, this.config.allowedGitHosts, this.config.privateGitHosts);
     if (parsed.ref?.startsWith('-')) throw new HarnessError('INVALID_INPUT', 'ref cannot start with a dash');
     const now = Date.now();
     const workspaceId = opaqueId('ws');
@@ -1123,6 +1127,9 @@ export class WorkspaceService {
     // for a non-GitHub host, and in cloudflare-access mode the operator-wide
     // environment token is excluded by `envFallbackGitHubToken`.
     const fallbackAvailable = isGitHub && hasGitHubFallbackCredential(this.config, record.ownerId, this.metadata);
+    let hostname = '';
+    try { hostname = new URL(record.repositoryUrl).hostname; } catch { /* reported as read-only */ }
+    const gitHostTokenAvailable = !isGitHub && hostname !== '' && hasGitHostToken(this.config, record.ownerId, hostname, this.metadata);
     let contentsRead = true;
     let contentsWrite = false;
     let issuesRead = false;
@@ -1188,6 +1195,10 @@ export class WorkspaceService {
         pullRequestsWrite = fallbackAvailable || grantedPullRequests === null || grantedPullRequests === 'write';
       }
     }
+
+    // A non-GitHub host credential can clone and push; issues and pull requests
+    // are GitHub API features and stay unavailable.
+    if (gitHostTokenAvailable) contentsWrite = true;
 
     const privileged = authMode === 'cloudflare-access';
 
@@ -1678,7 +1689,7 @@ export class WorkspaceService {
   }
 
   private async probeRemoteRefOid(record: WorkspaceRecord, branch: string, token?: string, signal?: AbortSignal): Promise<string | undefined> {
-    const repositoryUrl = await validateRepositoryUrl(record.repositoryUrl, this.config.allowedGitHosts);
+    const repositoryUrl = await validateRepositoryUrl(record.repositoryUrl, this.config.allowedGitHosts, this.config.privateGitHosts);
     const helperName = `chm-probe-${randomBytes(6).toString('hex')}`;
     try {
       const askpassScript = `#!/usr/bin/env bash
@@ -1725,7 +1736,7 @@ git -c http.followRedirects=false -c core.hooksPath=/dev/null ls-remote "$1" "$2
   }
 
   private async remoteFetch(record: WorkspaceRecord, remoteRef: string | undefined, signal?: AbortSignal, historySpec = '') {
-    const repositoryUrl = await validateRepositoryUrl(record.repositoryUrl, this.config.allowedGitHosts);
+    const repositoryUrl = await validateRepositoryUrl(record.repositoryUrl, this.config.allowedGitHosts, this.config.privateGitHosts);
     const token = await this.repositoryToken(record.ownerId, repositoryUrl, 'read');
     const transferName = `git-transfer-${randomBytes(12).toString('hex')}`;
     try {
@@ -1742,7 +1753,7 @@ git -c http.followRedirects=false -c core.hooksPath=/dev/null ls-remote "$1" "$2
   }
 
   private async remotePush(record: WorkspaceRecord, input: Record<string, unknown>, signal?: AbortSignal): Promise<RunnerResponse> {
-    const repositoryUrl = await validateRepositoryUrl(record.repositoryUrl, this.config.allowedGitHosts);
+    const repositoryUrl = await validateRepositoryUrl(record.repositoryUrl, this.config.allowedGitHosts, this.config.privateGitHosts);
     const repoStr = this.extractRepositoryName(repositoryUrl);
     let token: string | undefined;
     try {
@@ -1758,7 +1769,9 @@ git -c http.followRedirects=false -c core.hooksPath=/dev/null ls-remote "$1" "$2
       throw err;
     }
     if (!token) {
-      throw new HarnessError('REPOSITORY_OPERATION_NOT_AUTHORIZED', 'Git push requires a configured GitHub App with repository write access', 403, false, {
+      throw new HarnessError('REPOSITORY_OPERATION_NOT_AUTHORIZED', isGitHubHost(repositoryUrl.hostname)
+        ? 'Git push requires a configured GitHub App with repository write access'
+        : `Git push requires the ${gitHostTokenName(repositoryUrl.hostname)} credential for this host`, 403, false, {
         operation: 'git_push',
         repository: repoStr ?? undefined,
         requiredCapability: 'repository.push'
@@ -3192,7 +3205,7 @@ git -c http.followRedirects=false -c core.hooksPath=/dev/null ls-remote "$1" "$2
         if (claim.action === 'RECONCILE_REQUIRED' && claim.existing) {
           const existingOp = claim.existing;
           if (existingOp.status === 'UNKNOWN_REMOTE_STATE' && existingOp.localCommitSha) {
-            const repositoryUrl = await validateRepositoryUrl(record.repositoryUrl, this.config.allowedGitHosts);
+            const repositoryUrl = await validateRepositoryUrl(record.repositoryUrl, this.config.allowedGitHosts, this.config.privateGitHosts);
             let token: string | undefined;
             try {
               token = await this.repositoryToken(record.ownerId, repositoryUrl, 'write');
@@ -3800,12 +3813,26 @@ git -c http.followRedirects=false -c core.hooksPath=/dev/null ls-remote "$1" "$2
   return await dispatchAction();
 }
 
+  /** The non-GitHub host credential for a repository URL, for redaction only. */
+  private gitHostTokenFor(ownerId: string, repositoryUrl: string): { name: string; token: string } | undefined {
+    let hostname: string;
+    try { hostname = new URL(repositoryUrl).hostname; } catch { return undefined; }
+    if (isGitHubHost(hostname)) return undefined;
+    const token = resolveGitHostToken({ config: this.config, principalId: ownerId, hostname, metadata: this.metadata });
+    return token ? { name: gitHostTokenName(hostname), token } : undefined;
+  }
+
   /**
    * Resolve a Git credential for one workspace operation. GitHub App
    * credentials are preferred; the operator-supplied fallback is used only when
    * no App token can be minted, so existing App deployments are unaffected.
    */
   private async repositoryToken(ownerId: string, repositoryUrl: URL, permission: 'read' | 'write'): Promise<string | undefined> {
+    // Non-GitHub hosts use only their own host-named credential; a GitHub
+    // credential is never offered to another host.
+    if (!isGitHubHost(repositoryUrl.hostname)) {
+      return resolveGitHostToken({ config: this.config, principalId: ownerId, hostname: repositoryUrl.hostname, metadata: this.metadata });
+    }
     const fallback = () => resolveGitHubFallbackToken({
       config: this.config,
       principalId: ownerId,

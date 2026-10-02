@@ -15,6 +15,19 @@ import { z } from 'zod';
  */
 export const GITHUB_CREDENTIAL_SECRET_NAMES = ['GH_TOKEN', 'GITHUB_TOKEN'] as const;
 
+/**
+ * Credential name for a non-GitHub Git host: `GIT_TOKEN_` plus the hostname
+ * upper-cased with every non-alphanumeric run replaced by `_`
+ * (`gitlab.example.com` → `GIT_TOKEN_GITLAB_EXAMPLE_COM`). The runner reads it
+ * from its environment (owner-bearer mode) or from the principal's global
+ * secrets, and sends it only to that host.
+ */
+export const GIT_HOST_TOKEN_PREFIX = 'GIT_TOKEN_';
+
+export function gitHostTokenName(hostname: string): string {
+  return GIT_HOST_TOKEN_PREFIX + hostname.toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
 export const FORBIDDEN_SECRET_NAMES: Record<string, true> = {
   PATH: true,
   HOME: true,
