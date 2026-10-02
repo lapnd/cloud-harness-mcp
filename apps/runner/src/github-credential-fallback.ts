@@ -32,12 +32,13 @@ function usableToken(value: string | undefined): string | undefined {
  *
  * Refused in `cloudflare-access` mode: a credential that authorizes every
  * repository the operator can reach must never stand in for a principal-scoped
- * GitHub App grant. That mode uses a principal's own global secret instead.
+ * GitHub App grant, unless the single-owner `OPERATOR_GIT_CREDENTIALS` opt-in
+ * is set. That mode otherwise uses a principal's own global secret instead.
  */
 export function envFallbackGitHubToken(
  config: RunnerConfig,
 ): string | undefined {
- if ((config.authMode ?? "owner-bearer") === "cloudflare-access")
+ if ((config.authMode ?? "owner-bearer") === "cloudflare-access" && !config.operatorGitCredentials)
   return undefined;
  return usableToken(config.githubToken);
 }

@@ -7,11 +7,16 @@ import type { MetadataStore } from './metadata-store.js';
  * A host credential is sent only to the host it is named after, and a GitHub
  * credential is never sent to any other host. The runner environment form
  * (`GIT_TOKEN_<HOST>`) follows the same rule as `GH_TOKEN`: it is honoured only
- * in `owner-bearer` mode; `cloudflare-access` deployments use the principal's
- * own global secret of the same name.
+ * in `owner-bearer` mode, or with the single-owner `OPERATOR_GIT_CREDENTIALS`
+ * opt-in; otherwise `cloudflare-access` deployments use the principal's own
+ * global secret of the same name.
  */
 export function isGitHubHost(hostname: string): boolean {
   return hostname.toLowerCase() === 'github.com';
+}
+
+function operatorCredentialsAllowed(config: RunnerConfig): boolean {
+  return (config.authMode ?? 'owner-bearer') !== 'cloudflare-access' || config.operatorGitCredentials === true;
 }
 
 export function resolveGitHostToken(input: {
@@ -21,7 +26,7 @@ export function resolveGitHostToken(input: {
   metadata?: MetadataStore | undefined;
 }): string | undefined {
   const name = gitHostTokenName(input.hostname);
-  if ((input.config.authMode ?? 'owner-bearer') !== 'cloudflare-access') {
+  if (operatorCredentialsAllowed(input.config)) {
     const environmentToken = input.config.gitHostTokens?.[name];
     if (environmentToken) return environmentToken;
   }
@@ -37,7 +42,7 @@ export function resolveGitHostToken(input: {
 /** Presence check without decrypting, for capability reporting. */
 export function hasGitHostToken(config: RunnerConfig, principalId: string, hostname: string, metadata: MetadataStore | undefined): boolean {
   const name = gitHostTokenName(hostname);
-  if ((config.authMode ?? 'owner-bearer') !== 'cloudflare-access' && config.gitHostTokens?.[name]) return true;
+  if (operatorCredentialsAllowed(config) && config.gitHostTokens?.[name]) return true;
   if (!metadata) return false;
   try {
     return metadata.listGlobalSecrets(principalId).some((secret) => secret.name.toUpperCase() === name);

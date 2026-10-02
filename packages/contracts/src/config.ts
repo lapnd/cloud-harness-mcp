@@ -225,6 +225,13 @@ export const RunnerConfigSchema = z.object({
    * Same boundary as `githubToken`: runner-only and `owner-bearer` mode only.
    */
   gitHostTokens: z.record(z.string(), z.string().min(1).max(512)).default({}),
+  /**
+   * Single-owner opt-in (`OPERATOR_GIT_CREDENTIALS=true`): in
+   * `cloudflare-access` mode, also honour the runner-environment `GH_TOKEN` and
+   * `GIT_TOKEN_<HOST>` credentials. Enable it only when the Access policy
+   * admits exactly the operator, because every principal can then use them.
+   */
+  operatorGitCredentials: enabled.default(false),
   networkProfile: ExecutorNetworkProfileSchema.default('dependency-access'),
   /**
    * Shipped default is egress-enabled so a workspace can reach the GitHub API

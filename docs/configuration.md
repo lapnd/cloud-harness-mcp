@@ -107,7 +107,10 @@ schemes or private addresses. `PRIVATE_GIT_HOSTS` names the allowlisted hosts
 unique-local addresses; loopback and link-local stay forbidden for every host.
 Non-GitHub hosts authenticate with `GIT_TOKEN_<HOST>` (see `.env.example` and
 `gitHostTokenName` in `packages/contracts/src/secret-policy.ts`); a GitHub
-credential is never sent to another host. The effective executor network profile resolves in
+credential is never sent to another host. In `cloudflare-access` mode these
+runner-environment credentials (and `GH_TOKEN`) are ignored unless
+`OPERATOR_GIT_CREDENTIALS=true`, an opt-in meant for deployments whose Access
+policy admits only the operator. The effective executor network profile resolves in
 three tiers, each of which outranks the next:
 
 1. an explicit `workspace_open.networkProfile`;

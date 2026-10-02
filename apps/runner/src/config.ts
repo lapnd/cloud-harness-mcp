@@ -141,6 +141,7 @@ export function loadRunnerConfigWithReadiness(): RunnerConfigLoadResult {
     allowedGitHosts: csv(process.env.ALLOWED_GIT_HOSTS, 'github.com'),
     privateGitHosts: csv(process.env.PRIVATE_GIT_HOSTS, '').map((host) => host.toLowerCase()),
     gitHostTokens: gitHostTokensFromEnvironment(),
+    operatorGitCredentials: process.env.OPERATOR_GIT_CREDENTIALS,
     networkProfile: process.env.WORKSPACE_NETWORK_PROFILE,
     dependencyDnsResolvers: process.env.DEPENDENCY_DNS_RESOLVERS ? csv(process.env.DEPENDENCY_DNS_RESOLVERS, '8.8.8.8,1.1.1.1') : undefined,
     dependencyBridgeSubnet: process.env.DEPENDENCY_BRIDGE_SUBNET,

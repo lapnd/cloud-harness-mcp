@@ -72,3 +72,20 @@ describe('Git host credentials', () => {
     expect(hasGitHostToken(accessConfig, 'p', 'gitlab.corp.example', undefined)).toBe(false);
   });
 });
+
+describe('single-owner operator Git credentials', () => {
+  it('honours runner-environment credentials in cloudflare-access mode only with the opt-in', async () => {
+    const { envFallbackGitHubToken } = await import('../src/github-credential-fallback.js');
+    const base = {
+      authMode: 'cloudflare-access',
+      githubToken: 'ghp_operator_token_value_123456',
+      gitHostTokens: { GIT_TOKEN_GIT_LAN: 'host-token' }
+    } as unknown as RunnerConfig;
+    const optedIn = { ...base, operatorGitCredentials: true } as RunnerConfig;
+    expect(envFallbackGitHubToken(base)).toBeUndefined();
+    expect(resolveGitHostToken({ config: base, principalId: 'p', hostname: 'git.lan' })).toBeUndefined();
+    expect(envFallbackGitHubToken(optedIn)).toBe('ghp_operator_token_value_123456');
+    expect(resolveGitHostToken({ config: optedIn, principalId: 'p', hostname: 'git.lan' })).toBe('host-token');
+    expect(hasGitHostToken(optedIn, 'p', 'git.lan', undefined)).toBe(true);
+  });
+});
