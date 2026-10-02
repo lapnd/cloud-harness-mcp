@@ -4,7 +4,10 @@ export type CliTransport = 'http' | 'stdio';
 
 export type CliOptions = {
   transport: CliTransport;
+  /** First workspace folder (kept for single-folder callers). */
   workspace?: string;
+  /** Every `--workspace` folder, in order; each becomes its own workspace. */
+  workspaces: string[];
   gitNetwork: boolean;
   gitPush: boolean;
   env: string[];
@@ -19,7 +22,7 @@ export type ParseCliResult =
 export function parseCliOptions(argv: string[]): ParseCliResult {
   let transport: CliTransport = 'http';
   let transportExplicit = false;
-  let workspace: string | undefined = undefined;
+  const workspaces: string[] = [];
   let gitNetwork = false;
   let gitPush = false;
   const env: string[] = [];
@@ -64,12 +67,12 @@ export function parseCliOptions(argv: string[]): ParseCliResult {
     if (arg === '--workspace') {
       const next = argv[++i];
       if (next === undefined) return { ok: false, error: 'missing argument for --workspace' };
-      workspace = next;
+      workspaces.push(next);
       continue;
     }
 
     if (arg.startsWith('--workspace=')) {
-      workspace = arg.slice('--workspace='.length);
+      workspaces.push(arg.slice('--workspace='.length));
       continue;
     }
 
@@ -102,9 +105,11 @@ export function parseCliOptions(argv: string[]): ParseCliResult {
     return { ok: false, error: `unexpected argument: "${arg}"` };
   }
 
+  const workspace = workspaces[0];
   const options: CliOptions = {
     transport,
     ...(workspace !== undefined ? { workspace } : {}),
+    workspaces,
     gitNetwork,
     gitPush,
     env,
@@ -123,8 +128,9 @@ export function parseCliOptions(argv: string[]): ParseCliResult {
     // Serving a local folder over HTTP is a deliberate choice, never a default.
     return { ok: false, error: '--workspace requires an explicit --transport stdio or --transport http' };
   }
-  if (workspace && !isAbsolute(workspace)) {
-    return { ok: false, error: `--workspace path must be absolute (received: "${workspace}")` };
+  const relative = workspaces.find((path) => !isAbsolute(path));
+  if (relative !== undefined) {
+    return { ok: false, error: `--workspace path must be absolute (received: "${relative}")` };
   }
 
   if (gitPush && !gitNetwork) {
@@ -146,7 +152,8 @@ Usage:
 
 Options:
   --transport <http|stdio>   Transport protocol: http (default) or stdio
-  --workspace <path>         Absolute path to a local folder to serve as the workspace
+  --workspace <path>         Absolute path to a local folder to serve as a workspace (repeatable:
+                             each folder, e.g. each project repository, is its own workspace)
                              (required for stdio; with --transport http, serves it over
                              authenticated HTTP instead of using the runner)
   --git-network              Enable network Git operations (fetch, pull, clone) in local mode

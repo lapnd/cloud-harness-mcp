@@ -140,6 +140,10 @@ executor, dashboard or MCP gateway in this mode: commands run as the API
 process user inside the folder, so run it inside a dedicated VM or machine and
 expose only the folders you want the model to change.
 
+Repeat `--workspace` to serve several project folders (each its own Git
+repository) from one endpoint: every folder becomes its own workspace with its
+own `workspaceId`, and calls are routed by that id.
+
 ### CLI options
 
 | Option | Description |

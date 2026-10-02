@@ -8,6 +8,7 @@ import { createLocalHttpApp } from './local-http-app.js';
 import { loadApiConfig } from './config.js';
 import { parseCliOptions, getCliHelp } from './cli-options.js';
 import { LocalWorkspaceBackend } from './local/local-workspace-backend.js';
+import { MultiLocalWorkspaceBackend } from './local/multi-local-workspace-backend.js';
 import { apiLogger } from './logging.js';
 import { createCloudHarnessServer } from './mcp-server.js';
 import { serverVersion } from './version.js';
@@ -19,6 +20,14 @@ if (!parsed.ok) {
 }
 
 const { options } = parsed;
+
+/** One folder: the folder backend itself. Several: one workspace per folder behind a router. */
+async function createLocalBackend(): Promise<LocalWorkspaceBackend | MultiLocalWorkspaceBackend> {
+  const roots: string[] = [];
+  for (const path of options.workspaces) roots.push(await resolveWorkspaceRoot(path));
+  const backends = roots.map((root) => new LocalWorkspaceBackend(root, options));
+  return backends.length === 1 ? backends[0]! : new MultiLocalWorkspaceBackend(backends);
+}
 
 async function resolveWorkspaceRoot(workspacePath: string): Promise<string> {
   try {
@@ -54,8 +63,7 @@ if (options.transport === 'stdio') {
     process.exit(1);
   }
 
-  const canonicalRoot = await resolveWorkspaceRoot(options.workspace!);
-  const backend = new LocalWorkspaceBackend(canonicalRoot, options);
+  const backend = await createLocalBackend();
   const handle = serveStdio(() => createCloudHarnessServer(backend), {
     legacy: 'serve',
     onerror: (error) => {
@@ -91,11 +99,11 @@ if (options.transport === 'stdio') {
   }
   const config = loadApiConfig();
   const runtime = options.workspace
-    ? createLocalHttpApp(config, new LocalWorkspaceBackend(await resolveWorkspaceRoot(options.workspace), options))
+    ? createLocalHttpApp(config, await createLocalBackend())
     : createApiApp(config);
   const server = createServer(runtime.app);
   server.listen(config.port, config.host, () =>
-    apiLogger.info({ host: config.host, port: config.port, localWorkspace: options.workspace ?? null }, 'API listening')
+    apiLogger.info({ host: config.host, port: config.port, localWorkspaces: options.workspaces }, 'API listening')
   );
 
   async function shutdown(signal: string) {
