@@ -371,6 +371,27 @@ bootstrap_secrets() {
   fi
 }
 
+provision_model_gateway() {
+  # The runner waits for a healthy model gateway, which refuses to start unless its profile
+  # file and provider credential file are regular files. Docker creates missing bind-mount
+  # sources as directories, so replace those and seed an inert default: the gateway only
+  # reads the credential when an agent actually calls a provider.
+  local dir=/etc/cloud-harness-model-gateway
+  install -d -m 0755 "$dir"
+  local item
+  for item in profiles.json provider-api-key; do
+    if [[ -d "$dir/$item" ]]; then rmdir "$dir/$item"; fi
+  done
+  if [[ ! -f "$dir/profiles.json" ]]; then
+    install -m 0644 "$REPO_DIR/apps/model-gateway/profiles/production.example.json" "$dir/profiles.json"
+    log "Seeded model gateway profiles at $dir/profiles.json"
+  fi
+  if [[ ! -f "$dir/provider-api-key" ]]; then
+    install -m 0600 -o 1000 -g 1000 /dev/null "$dir/provider-api-key"
+    log "Created empty model gateway provider credential (agents stay disabled until it is set)"
+  fi
+}
+
 configure_ingress() {
   log "Configuring ingress topology: $INGRESS_MODE..."
   printf 'INGRESS_MODE=%s\n' "$INGRESS_MODE" > "$CONFIG_DIR/ingress.conf"
@@ -489,6 +510,7 @@ main() {
   bootstrap_directories
   checkout_repository
   bootstrap_secrets
+  provision_model_gateway
   configure_ingress
   install_systemd_and_tools
   execute_first_deployment
